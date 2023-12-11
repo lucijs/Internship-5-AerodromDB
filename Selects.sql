@@ -5,11 +5,12 @@ SELECT * FROM  Employes WHERE (SELECT COUNT(*) FROM EmployesOnAFlight e WHERE e.
 SELECT * FROM  Flights WHERE ((SELECT AirportId FROM Airports WHERE CityId = (SELECT CityId FROM Cities WHERE Name = 'Split'))=WhereTo or (SELECT AirportId FROM Airports WHERE CityId = (SELECT CityId FROM Cities WHERE Name = 'Split'))=WhereFrom) and Departure<'2024-01-01' AND Departure>'2022-01-01'; 
 
 
-SELECT* FROM  Flights WHERE (select CityId from Cities WHERE name = 'Vienna')=WhereTo  and Departure<'2024-01-01' and departure>'2023-11-30'
-SELECT count(*) FROM Tickets WHERE type = 2 and flightid IN(select flightid from flight WHERE departure>='2021-01-01' and departure<='2022-01-01' and airplainid=(select airplaneid from airplane where companyid =(select companyid from company where name = 'AIRDUMO') ))
-SELECT avg(gradenumber) FROM grade WHERE ticketid =(select ticketid from tickets WHERE flightid=(select flightid from flight where airplainid=(select airplaneid from airplane where companyid = (select companyid from company where name='AIRDUMO'))))
+SELECT* FROM  Flights WHERE WhereTo IN (SELECT AirportID FROM Airports WHERE CityId = (SELECT CityId FROM Cities WHERE Name = 'Vienna'))  AND Departure<'2024-01-01' AND Departure>'2023-11-30';
 
-SELECT now()
+
+SELECT COUNT(*) FROM Tickets WHERE Type = 2 and FlightId IN(select flightid from flights WHERE departure>='2021-01-01' and departure<='2022-01-01' and airplaneid=(select airplaneid from airplanes where companyid =(select companyid from companies where name = 'AirDUMP') ));
+SELECT avg(Number) FROM grade WHERE ticketid =(select ticketid from tickets WHERE flightid=(select flightid from flights where airplaneid=(select airplaneid from airplanes where companyid = (select companyid from companies where name='AirDUMP'))));
+
 SELECT * FROM Aerodrom a where cityid=(select cityid from cities where name ='London')
 order by count((select companyid from company where name='AirBus')=(select companyid from airplane ap 
 			  where airplaneid=(select airplainid from flight 
