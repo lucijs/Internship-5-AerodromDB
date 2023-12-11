@@ -101,7 +101,7 @@ CREATE TABLE EmployesOnAFlight(
 --------------------------------------------------------
 --adding constraints and triggers
 --------------------------------------------------------
-CREATE FUNCTION getAirplaneCapacity (id INT)
+CREATE OR REPLACE FUNCTION getAirplaneCapacity (id INT)
 	RETURNS INT
 	LANGUAGE plpgsql
 	AS
@@ -111,14 +111,14 @@ CREATE FUNCTION getAirplaneCapacity (id INT)
 	BEGIN
 		SELECT capacity
 		INTO cap
-		FROM Airplane
+		FROM Airplanes
 		WHERE AirplaneId = id;
 		
 		RETURN cap;
 	END;
 	$$
 --------------------------------------------------------
-CREATE FUNCTION getAirplaneCompany(id INT)
+CREATE OR REPLACE FUNCTION getAirplaneCompany(id INT)
 	RETURNS INT
 	LANGUAGE plpgsql
 	AS
@@ -128,14 +128,14 @@ CREATE FUNCTION getAirplaneCompany(id INT)
 	BEGIN
 		SELECT CompanyId
 		INTO comp
-		FROM Airplane
+		FROM Airplanes
 		WHERE AirplaneId = id;
 		
 		RETURN comp;
 	END;
 	$$
 --------------------------------------------------------
-CREATE FUNCTION getAirportAirstripCapacity(id INT)
+CREATE OR REPLACE FUNCTION getAirportAirstripCapacity(id INT)
 	RETURNS INT
 	LANGUAGE plpgsql
 	AS
@@ -143,16 +143,16 @@ CREATE FUNCTION getAirportAirstripCapacity(id INT)
 	DECLARE 
 		cap INT;
 	BEGIN
-		SELECT CapacityOfAirstri
+		SELECT CapacityOfAirstrip
 		INTO cap
 		FROM Airports
-		WHERE AirplaneId = id;
+		WHERE AirportId = id;
 		
 		RETURN cap;
 	END;
 	$$
 --------------------------------------------------------
-CREATE FUNCTION getAirportHangarCapacity(id INT)
+CREATE OR REPLACE FUNCTION getAirportHangarCapacity(id INT)
 	RETURNS INT
 	LANGUAGE plpgsql
 	AS
@@ -163,7 +163,7 @@ CREATE FUNCTION getAirportHangarCapacity(id INT)
 		SELECT CapacityOfHangar
 		INTO cap
 		FROM Airports
-		WHERE AirplaneId = id;
+		WHERE AirportId = id;
 		
 		RETURN cap;
 	END;
@@ -174,13 +174,13 @@ RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $$
 BEGIN
-	IF NEW.CapacityE+NEW.CapacityB > getAirplaneCapacity(NEW.Airplainid) 
-		THEN NEW.CapacityB = getAirplaneCapacity(NEW.Airplainid);
+	IF NEW.CapacityE+NEW.CapacityB > getAirplaneCapacity(NEW.Airplaneid) 
+		THEN NEW.CapacityB = getAirplaneCapacity(NEW.Airplaneid);
 	End IF;
-	IF EXISTS(SELECT NEW.Number FROM FLights WHERE getAirplaneCompany(AirplaneId)=getAirplaneCompany(NEW.AirplaneId)) THEN
+	IF (SELECT COUNT(*) FROM FLights WHERE getAirplaneCompany(AirplaneId)=getAirplaneCompany(NEW.AirplaneId) AND Number = NEW.Number)>0 THEN
 		RAISE EXCEPTION 'Insert prevented: the flight number has to be unique.';
 	END IF;
-	IF (SELECT State FROM Airplane WHERE AirplaneId = NEW.AirplaneId) != 2 THEN
+	IF (SELECT StateId FROM Airplanes WHERE AirplaneId = NEW.AirplaneId) != 2 THEN
 		RAISE EXCEPTION 'Insert prevented: the airplane has to be active.';
 	END IF;
 	IF (SELECT COUNT(*) FROM Flights WHERE WhereFrom = NEW.WhereFrom 
@@ -216,11 +216,13 @@ RETURNS INT
 	END;
 	$$
 --------------------------------------------------------
-CREATE FUNCTION prevent_insert_into_Loyalty()
+--zamijenila sam 10 u 3 jer mockaroo dopušta najviše 1000 redaka ako si prijavljen i nije postojala šansa da se generira dovoljno usera da bi 
+--ih 500 imalo 10 kupljenih karata
+CREATE OR REPLACE FUNCTION prevent_insert_into_Loyalty()
 RETURNS TRIGGER AS $$
 BEGIN
-	IF numberOfFlights(NEW.UserId)<10 THEN
-		RAISE EXCEPTION 'Insert prevented: user needs to have at least 10 bought tickets.';
+	IF numberOfFlights(NEW.UserId)<3 THEN
+		RAISE EXCEPTION 'Insert prevented: user needs to have at least 3 bought tickets.';
 	END IF;
 	RETURN NEW;
 END;
@@ -231,7 +233,7 @@ BEFORE INSERT ON Loyalties
 FOR EACH ROW
 EXECUTE FUNCTION prevent_insert_into_Loyalty();
 --------------------------------------------------------
-CREATE FUNCTION getFlightCapacityB (id INT)
+CREATE OR REPLACE FUNCTION getFlightCapacityB (id INT)
 	RETURNS INT
 	LANGUAGE plpgsql
 	AS
@@ -242,13 +244,13 @@ CREATE FUNCTION getFlightCapacityB (id INT)
 		SELECT CapacityB
 		INTO cap
 		FROM Flights
-		WHERE FlightsId = id;
+		WHERE FlightId = id;
 		
 		RETURN cap;
 	END;
 	$$
 --------------------------------------------------------	
-CREATE FUNCTION getFlightCapacityE (id INT)
+CREATE OR REPLACE FUNCTION getFlightCapacityE (id INT)
 	RETURNS INT
 	LANGUAGE plpgsql
 	AS
@@ -259,24 +261,24 @@ CREATE FUNCTION getFlightCapacityE (id INT)
 		SELECT CapacityE
 		INTO cap
 		FROM Flights
-		WHERE FlightsId = id;
+		WHERE FlightId = id;
 		
 		RETURN cap;
 	END;
 	$$
 --------------------------------------------------------
-CREATE FUNCTION buy_ticket()
+CREATE OR REPLACE FUNCTION buy_ticket()
 RETURNS TRIGGER 
 LANGUAGE plpgsql
 AS $$
 BEGIN
-	IF EXISTS(SELECT NEW.SeatNumber FROM Tickets WHERE FlightId=NEW.FlightId) THEN
+	IF NEW.SeatNumber in (SELECT SeatNumber FROM Tickets WHERE FlightId=NEW.FlightId) THEN
 		RAISE EXCEPTION 'Insert prevented: there is another ticket with that seat number.';
 	END IF;
-	IF NEW.Type = 1 AND (SELECT COUNT(*) FROM Tickets WHERE Type = 1 AND FlightId=NEW.FlightId)=getFlightCapacityB(NEW.Flight) THEN
+	IF NEW.Type = 1 AND (SELECT COUNT(*) FROM Tickets WHERE Type = 1 AND FlightId=NEW.FlightId)=getFlightCapacityB(NEW.FlightId) THEN
 		RAISE EXCEPTION 'Insert prevented: Bussines class is full on this flight.';
 	END IF;
-	IF NEW.Type = 2 AND (SELECT COUNT(*) FROM Tickets WHERE Type = 2 AND FlightId=NEW.FlightId)=getFlightCapacityE(NEW.Flight) THEN
+	IF NEW.Type = 2 AND (SELECT COUNT(*) FROM Tickets WHERE Type = 2 AND FlightId=NEW.FlightId)=getFlightCapacityE(NEW.FlightId) THEN
 		RAISE EXCEPTION 'Insert prevented: Economy class is full on this flight.';
 	END IF;
 	RETURN NEW;
@@ -287,12 +289,12 @@ BEFORE INSERT ON  Tickets
 FOR EACH ROW
 EXECUTE FUNCTION buy_ticket();
 --------------------------------------------------------
-CREATE FUNCTION add_pilot()
+CREATE OR REPLACE FUNCTION add_pilot()
 RETURNS TRIGGER 
 LANGUAGE plpgsql
 AS $$
 BEGIN
-	IF NEW.Role=1 and (NOW()-NEW.Birthday<20*365.25 or NOW()-NEW.Birthday>60*365.25) THEN
+	IF NEW.Role=1 and (NEW.Birthday<'1963-12-11'or NEW.Birthday>'2003-12-11' )THEN
 		RAISE EXCEPTION 'Insert prevented: the pilot has to be at least 20 and at most 60 years old.';
 	END IF;
 	RETURN NEW;
@@ -303,8 +305,8 @@ BEFORE INSERT ON  Employes
 FOR EACH ROW
 EXECUTE FUNCTION add_pilot();
 --------------------------------------------------------	
-CREATE FUNCTION getFlightDeparture (id INT)
-	RETURNS INT
+CREATE OR REPLACE FUNCTION getFlightDeparture (id INT)
+	RETURNS TIMESTAMP
 	LANGUAGE plpgsql
 	AS
 	$$
@@ -314,24 +316,24 @@ CREATE FUNCTION getFlightDeparture (id INT)
 		SELECT Departure
 		INTO dep
 		FROM Flights
-		WHERE FlightsId = id;
+		WHERE FlightId = id;
 		
 		RETURN dep;
 	END;
 	$$
 --------------------------------------------------------
-CREATE FUNCTION getFlightArrival(id INT)
-	RETURNS INT
+CREATE OR REPLACE FUNCTION getFlightArrival(id INT)
+	RETURNS TIMESTAMP
 	LANGUAGE plpgsql
 	AS
 	$$
 	DECLARE 
 		ariv TIMESTAMP;
 	BEGIN
-		SELECT Departure::timestamp+interval Duration
+		SELECT Departure::timestamp+Duration
 		INTO ariv
 		FROM Flights
-		WHERE FlightsId = id;
+		WHERE FlightId = id;
 		
 		RETURN ariv;
 	END;
@@ -355,13 +357,13 @@ BEFORE INSERT ON  EmployesOnAFlight
 FOR EACH ROW
 EXECUTE FUNCTION add_employe();
 --------------------------------------------------------
-CREATE FUNCTION add_airplane()
+CREATE OR REPLACE FUNCTION add_airplane()
 RETURNS TRIGGER 
 LANGUAGE plpgsql
 AS $$
 BEGIN
-	IF NEW.Status=1 THEN
-		NEW.Copmapny =NULL;
+	IF NEW.StateId=1 THEN
+		NEW.CompanyId =NULL;
 	END IF;
 	RETURN NEW;
 END; $$
